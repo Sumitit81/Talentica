@@ -1,0 +1,114 @@
+# VPC Creation
+   Resources:
+     PubPrivateVPC:
+       Type: 'AWS::EC2::VPC'
+       Properties:
+         CidrBlock: 10.0.0.0/16
+##Public Subnet
+     PublicSubnet1:
+       Type: 'AWS::EC2::Subnet'
+       Properties:
+         VpcId: !Ref PubPrivateVPC
+         AvailabilityZone: us-east-1a
+         CidrBlock: 10.0.0.0/24
+         MapPublicIpOnLaunch: true
+##Private Subnet
+     PrivateSubnet1:
+       Type: 'AWS::EC2::Subnet'
+       Properties:
+         VpcId: !Ref PubPrivateVPC
+         AvailabilityZone: us-east-1a
+         CidrBlock: 10.0.1.0/24
+         MapPublicIpOnLaunch: false
+
+####Ec2 instance config
+     WebServer:
+        Type: 'AWS::EC2::Instance'
+        Properties:
+          InstanceType: t2.micro
+          ImageId: ami-09e67e426f25ce0d7 # AMI of Ubuntu server in N.Virginea
+          PrivateIpAddress: 10.0.0.5
+          SubnetId: !Ref PublicSubnet1
+          KeyName : MyKp
+
+
+     DBServer:
+        Type: 'AWS::EC2::Instance'
+        Properties:
+          InstanceType: t2.micro
+          ImageId: ami-0d5eff06f840b45e9
+          PrivateIpAddress: 10.0.1.5
+          SubnetId: !Ref PrivateSubnet1
+
+     InternetGateway:
+        Type: 'AWS::EC2::InternetGateway'
+        Properties:
+          Tags:
+           - Key: Name
+             Value: !Join [_, [!Ref 'AWS::StackName']]
+           - Key: Network
+             Value: Public
+
+     GatewayToInternet:
+        Type: 'AWS::EC2::VPCGatewayAttachment'
+        Properties:
+         VpcId: !Ref PubPrivateVPC
+         InternetGatewayId: !Ref InternetGateway
+
+     PublicRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+         VpcId: !Ref PubPrivateVPC
+         Tags:
+           - Key: Network
+             Value: Public
+
+     PublicRoute:
+        Type: 'AWS::EC2::Route'
+        DependsOn: GatewayToInternet
+        Properties:
+         RouteTableId: !Ref PublicRouteTable
+         DestinationCidrBlock: 0.0.0.0/0
+         GatewayId: !Ref InternetGateway
+
+     PublicSubnet1RouteTableAssociation:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+         SubnetId: !Ref PublicSubnet1
+         RouteTableId: !Ref PublicRouteTable
+
+
+     NatGateway:
+        Type: "AWS::EC2::NatGateway"
+        DependsOn: NatPublicIP
+        Properties:
+         AllocationId: !GetAtt NatPublicIP.AllocationId
+         SubnetId: !Ref PublicSubnet1
+
+     NatPublicIP:
+        Type: "AWS::EC2::EIP"
+        DependsOn: PubPrivateVPC
+        Properties:
+         Domain: vpc
+
+
+     PrivateRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+         VpcId: !Ref PubPrivateVPC
+         Tags:
+           - Key: Network
+             Value: Private
+
+     PrivateRoute:
+        Type: 'AWS::EC2::Route'
+        Properties:
+         RouteTableId: !Ref PrivateRouteTable
+         DestinationCidrBlock: 0.0.0.0/0
+         NatGatewayId: !Ref NatGateway
+
+     PrivateSubnet1RouteTableAssociation:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+         SubnetId: !Ref PrivateSubnet1
+         RouteTableId: !Ref PrivateRouteTable
